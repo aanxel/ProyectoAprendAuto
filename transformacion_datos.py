@@ -1,11 +1,8 @@
-import numpy as np
+from numpy.lib.function_base import average
 import pandas as pd
-import itertools as itr
-from sklearn import datasets
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import classification_report
-from sklearn.svm import SVC
 
 
 DATA_DEFAULT_PATH = './datos/HT_Sensor_dataset.dat'
@@ -24,6 +21,45 @@ def juntar_datos_metadatos(datos, metadatos):
     """
     join = datos.set_index('id').join(metadatos.set_index('id'), how='inner')
     return join
+
+
+def crear_paquetes(datos_join, tam_paquete=30, n_ids=100):
+    """ Crea paquetes del tamaño indicado en segundos y los devuelve como
+    listas de listas de diccionarios, donde cada elemento de la lista es un
+    paquete y cada paquete es una lista de diccionarios donde las claves son
+    las columnas del dataset
+
+    @param datos_join: unión de datos y metadatos
+    @type datos_join: dataframe
+    @param tam_paquete: tamaño en segundos del paquete, defaults to 30
+    @type tam_paquete: int
+    @rtype: lista de listas de diccionarios
+    """
+    agrupacion_id = datos_join.groupby('id')
+    ids = agrupacion_id.groups.keys()
+    paquetes = []
+    for id in ids:  # Para cada grupo original generar los paquetes
+        grupo_id = agrupacion_id.groups[id]
+        paquete = []
+        #  t_inicial = grupo_id[]
+
+
+
+
+def empaquetar_muestras(datos_join, tam_paquete=30):
+    """ Dado el conjunto de datos con la unión de metadatos y datos. Empaqueta
+    las muestras en intervalos de tamaño de paquete (en segundos) y asigna la
+    clase mayoritaria de las muestras del paquete, donde el peso de cada
+    muestra del paquete crece linealmente en el tiempo.
+
+    @param datos_join: Datos y metadatos unidos
+    @type datos_join: 
+    @param peso_historico: [description], defaults to 0.5
+    @type peso_historico: float, optional
+    @param tam_paquete: [description], defaults to 30
+    @type tam_paquete: int, optional
+    """
+    pass
 
 
 def filtrar_fuera_induccion(datos_join):
@@ -158,12 +194,33 @@ def grid_search(X, y, test_size, scores, init_clf, tuned_parameters):
 
 
 if __name__ == '__main__':
-    # df_datos = leer_conjunto_datos(DATA_DEFAULT_PATH)
-    # df_metadatos = leer_conjunto_datos(METADATA_DEFAULT_PATH)
-    # df_join = juntar_datos_metadatos(df_datos, df_metadatos)
+    df_datos = leer_conjunto_datos(DATA_DEFAULT_PATH)
+    df_metadatos = leer_conjunto_datos(METADATA_DEFAULT_PATH)
+    df_join = juntar_datos_metadatos(df_datos, df_metadatos)
+    agrupacion_id = df_join.groupby('id')
+    ids = agrupacion_id.groups.keys()
+    paquetes = []
+    for id in ids:  # Para cada grupo original generar los paquetes
+        grupo_id = agrupacion_id.get_group(id)
+        paquete = []
+        t_inicial = None
+        for _, fila in grupo_id.iterrows():
+            if t_inicial is None:
+                t_inicial = fila['time']
+                paquete.append(fila)
+            elif fila['time'] - t_inicial > 120 / 3600:
+                paquetes.append(paquete)
+                t_inicial = fila['time']
+                paquete = [fila]
+            else:
+                paquete.append(fila)
+        if paquete:
+            paquetes.append(paquete)
+    print(len(paquetes))
+    print(average([len(p) for p in paquetes]))
     # df_join = eliminar_metadata_sobrante(filtrar_fuera_induccion(df_join))
     # df_res = agrupar_datos(df_join, agg_funcs=['min', 'max'])
     # X, y = transformacion_numpy(df_res)
     # print(df_res.reset_index('id')[('R1', 'min')])
     # df_res.to_csv('./datos/transformacion.csv')
-    test(SVC)
+    pass
