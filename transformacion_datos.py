@@ -1,12 +1,19 @@
+# -*- coding: UTF-8 -*-
+
+import itertools
+from math import factorial, log
+import numpy as np
 from numpy.lib.function_base import average
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import classification_report
-
+from copy import deepcopy
 
 DATA_DEFAULT_PATH = './datos/HT_Sensor_dataset.dat'
 METADATA_DEFAULT_PATH = './datos/HT_Sensor_metadata.dat'
+DATA_TRAIN_DEFAULT_PATH = './datos/data_train.csv'
+DATA_TEST_DEFAULT_PATH = './datos/data_treal.csv'
 
 
 def juntar_datos_metadatos(datos, metadatos):
@@ -23,43 +30,144 @@ def juntar_datos_metadatos(datos, metadatos):
     return join
 
 
-def crear_paquetes(datos_join, tam_paquete=30, n_ids=100):
-    """ Crea paquetes del tamaño indicado en segundos y los devuelve como
-    listas de listas de diccionarios, donde cada elemento de la lista es un
-    paquete y cada paquete es una lista de diccionarios donde las claves son
-    las columnas del dataset
+# def crear_paquetes(datos_join, freq_paquete=30, unidades_por_freq=1):
+#     """ Para cada muestra original (agrupando por id), la divide cada tiempo
+#     determinado (freq_paquete, en segundos) y coloca todas las muestras
+#     anteriores de los últimos freq_paquete * unidades_por_freq segundos. Por
+#     ejemplo, si freq_paquete=30 y unidades_por_freq es 2, se simula que
+#     cada 30 segundos se creara un paquete con las muestras de los últimos
+#     60 segundos.
 
-    @param datos_join: unión de datos y metadatos
-    @type datos_join: dataframe
-    @param tam_paquete: tamaño en segundos del paquete, defaults to 30
-    @type tam_paquete: int
+#     @param datos_join: Resultado inmediato tras unir datos y metadatos
+#     @type datos_join: Dataframe
+#     @param freq_paquete: Cada cuántos segundos se toma una medida
+#     @type freq_paquete: int
+#     @param unidades_por_freq: Cuántos múltiplos de la frecuencia se utilizan
+#     para el tamaño final del paquete
+#     @type unidades_por_freq: int
+#     @rtype: lista de listas de diccionarios
+#     """
+#     agrupacion_id = datos_join.groupby('id')
+#     ids = agrupacion_id.groups.keys()
+#     paquetes = []
+#     for id in ids:  # Para cada grupo original generar los paquetes
+#         grupo_id = agrupacion_id.get_group(id)
+#         paquete = []
+#         t_inicial = None
+#         for fila in grupo_id.to_dict('records'):
+#             if t_inicial is None:
+#                 t_inicial = fila['time']
+#                 paquete.append(fila)
+#             elif fila['time'] - t_inicial > freq_paquete / 3600:
+#                 paquetes.append(paquete)
+#                 t_inicial = fila['time']
+#                 paquete = [fila]
+#             else:
+#                 paquete.append(fila)
+#         if paquete:
+#             paquetes.append(paquete)
+#     # Añadir la cola de los paquetes
+#     if unidades_por_freq > 1:
+#         for i in range(len(paquetes) - 1, 0, -1):
+#             for j in range(i - 1, max(i - unidades_por_freq, -1), - 1):
+#                 paquetes[i] = deepcopy(paquetes[j]) + paquetes[i]
+#     # Añadir un identificador a cada paquete
+#     for id, paquete in enumerate(paquetes):
+#         for fila in paquete:
+#             fila['id'] = id
+#     return paquetes
+
+
+def crear_paquetes(datos_join, freq_paquete=30, unidades_por_freq=1):
+    """ Para cada muestra original (agrupando por id), la divide cada tiempo
+    determinado (freq_paquete, en segundos) y coloca todas las muestras
+    anteriores de los últimos freq_paquete * unidades_por_freq segundos. Por
+    ejemplo, si freq_paquete=30 y unidades_por_freq es 2, se simula que
+    cada 30 segundos se creara un paquete con las muestras de los últimos
+    60 segundos.
+
+    @param datos_join: Resultado inmediato tras unir datos y metadatos
+    @type datos_join: Dataframe
+    @param freq_paquete: Cada cuántos segundos se toma una medida
+    @type freq_paquete: int
+    @param unidades_por_freq: Cuántos múltiplos de la frecuencia se utilizan
+    para el tamaño final del paquete
+    @type unidades_por_freq: int
     @rtype: lista de listas de diccionarios
     """
+    freq_paquete /= 3600  # Conversion a horas
     agrupacion_id = datos_join.groupby('id')
     ids = agrupacion_id.groups.keys()
     paquetes = []
     for id in ids:  # Para cada grupo original generar los paquetes
-        grupo_id = agrupacion_id.groups[id]
-        paquete = []
-        #  t_inicial = grupo_id[]
+        grupo_id = agrupacion_id.get_group(id)
+        t_inicial = grupo_id['time'].min()
+        t_final = grupo_id['time'].max()
+        n_paquetes = int((t_final - t_inicial) / freq_paquete) + 1
+        paquetes_nuevos = [list() for _ in range(n_paquetes)]
+        for fila in grupo_id.to_dict('records'):
+            pos = int((fila['time'] - t_inicial) / freq_paquete)
+            paquetes_nuevos[pos].append(fila)
+        # Añadir la cola de los paquetes
+        if unidades_por_freq > 1:
+            for i in range(len(paquetes_nuevos) - 1, 0, -1):
+                for j in range(i - 1, max(i - unidades_por_freq, -1), - 1):
+                    paquetes_nuevos[i] = (paquetes_nuevos[j] +
+                                          paquetes_nuevos[i])
+        paquetes += paquetes_nuevos
+    # Añadir un identificador a cada paquete
+    id = 0
+    ids = []
+    paquetes_f = []
+    for paquete in paquetes:
+        if paquete:
+            paquetes_f.append(paquete)
+            ids += [id] * len(paquete)
+            id += 1
+    return paquetes_f, ids
 
 
-
-
-def empaquetar_muestras(datos_join, tam_paquete=30):
-    """ Dado el conjunto de datos con la unión de metadatos y datos. Empaqueta
-    las muestras en intervalos de tamaño de paquete (en segundos) y asigna la
-    clase mayoritaria de las muestras del paquete, donde el peso de cada
-    muestra del paquete crece linealmente en el tiempo.
-
-    @param datos_join: Datos y metadatos unidos
-    @type datos_join: 
-    @param peso_historico: [description], defaults to 0.5
-    @type peso_historico: float, optional
-    @param tam_paquete: [description], defaults to 30
-    @type tam_paquete: int, optional
+def empaquetar_muestras(datos_join, freq_paquete=30, unidades_por_freq=1):
     """
-    pass
+    Dado un conjunto de muestras las empaqueta según la frecuencia y unidiades
+    por frecuencia pasados como argumento (véase crear_paquetes).
+    Finalmente clasifica y etiqueta cada paquete según un voto por mayoría
+    (el peso de cada muestra aumenta linealmente con el tiempo).
+
+    @param datos_join: Resultado inmediato tras unir datos y metadatos
+    @type datos_join: Dataframe
+    @param freq_paquete: Cada cuántos segundos se toma una medida
+    @type freq_paquete: int, optional
+    @param unidades_por_freq: Cuántos múltiplos de la frecuencia se utilizan
+    para el tamaño final del paquete
+    @type unidades_por_freq: int, optional
+    @rtype: Dataframe
+    """
+    paquetes, ids = crear_paquetes(datos_join, freq_paquete, unidades_por_freq)
+    # Etiquetar cada paquete. La clase es voto por mayoría ponderado, donde
+    # el peso de cada muestra del paquete aumenta cuadraticamente con el tiempo
+    clases = []
+    for paquete in paquetes:
+        votacion = [0, 0]
+        n = len(paquete)
+        # Suma de t = 1 hasta n de log(t)
+        denom_peso = n * (n + 1) // 2
+        # denom_peso = log(factorial(n))
+        denom_peso = n
+        clase_actual = None
+        for t, fila in enumerate(paquete):
+            clase_actual = fila['clase']
+            peso = (t + 1) / denom_peso
+            if fila['time'] < 0 or fila['time'] > fila['dt']:
+                votacion[0] += peso
+            else:
+                votacion[1] += peso
+        clase = 'background' if votacion[0] > votacion[1] else clase_actual
+        clases.append(clase)
+    r = pd.DataFrame(list(itertools.chain(*paquetes)))
+    r = r.drop(columns=['clase'])
+    r['id'] = ids
+    return r, clases
 
 
 def filtrar_fuera_induccion(datos_join):
@@ -70,8 +178,9 @@ def filtrar_fuera_induccion(datos_join):
     @type datos_join: dataframe
     @rtype: dataframe
     """
-    datos_join = datos_join[datos_join.time > 0]
-    datos_join = datos_join[datos_join.time <= datos_join.dt]
+    datos_join = datos_join[((datos_join.time > 0) &
+                            (datos_join.time <= datos_join.dt)) |
+                            (datos_join.clase == 'background')]
     return datos_join
 
 
@@ -107,7 +216,7 @@ def agrupar_datos(datos, agg_funcs=['count', 'sum', 'mean', 'median', 'min',
     @type agg_funcs: list, optional
     @rtype: dataframe
     """
-    return datos.groupby(['id', 'class']).agg(agg_funcs)
+    return datos.groupby(['id', 'clase']).agg(agg_funcs).fillna(-1)
 
 
 def transformacion_numpy(datos_group):
@@ -119,19 +228,7 @@ def transformacion_numpy(datos_group):
     @rtype: tupla con el conjunto de datos y con el set de etiquetas
     """
     return (datos_group.to_numpy(),
-            datos_group.index.get_level_values('class').to_numpy())
-
-
-# def _permutaciones_dicc_parametros(params):
-#     lista_valores = []
-#     lista_claves = []
-#     for atr, valores in params.items():
-#         lista_valores.append(valores)
-#         lista_claves.append(atr)
-#     permutaciones = itr.product(*lista_valores)
-#     for permutacion_atrs in permutaciones:
-#         yield {lista_claves[i]: permutacion_atrs[i]
-#                for i in range(len(lista_claves))}
+            datos_group.index.get_level_values('clase').to_numpy())
 
 
 # Busqueda de mejores parametros con grid search
@@ -193,34 +290,65 @@ def grid_search(X, y, test_size, scores, init_clf, tuned_parameters):
         print()
 
 
-if __name__ == '__main__':
-    df_datos = leer_conjunto_datos(DATA_DEFAULT_PATH)
-    df_metadatos = leer_conjunto_datos(METADATA_DEFAULT_PATH)
+def crear_dataframe_original(funciones_agregacion=['min', 'max', 'sum', 'mean',
+                                                'median', 'std', 'var', 'sem'],
+                          output_dir=DATA_TRAIN_DEFAULT_PATH,
+                          data_dir=DATA_DEFAULT_PATH,
+                          metadata_dir=METADATA_DEFAULT_PATH):
+    # Leer conjuntos de datos
+    df_datos = leer_conjunto_datos(data_dir)
+    df_metadatos = leer_conjunto_datos(metadata_dir)
+    # Unir datos y metadatos
     df_join = juntar_datos_metadatos(df_datos, df_metadatos)
-    agrupacion_id = df_join.groupby('id')
-    ids = agrupacion_id.groups.keys()
-    paquetes = []
-    for id in ids:  # Para cada grupo original generar los paquetes
-        grupo_id = agrupacion_id.get_group(id)
-        paquete = []
-        t_inicial = None
-        for _, fila in grupo_id.iterrows():
-            if t_inicial is None:
-                t_inicial = fila['time']
-                paquete.append(fila)
-            elif fila['time'] - t_inicial > 120 / 3600:
-                paquetes.append(paquete)
-                t_inicial = fila['time']
-                paquete = [fila]
-            else:
-                paquete.append(fila)
-        if paquete:
-            paquetes.append(paquete)
-    print(len(paquetes))
-    print(average([len(p) for p in paquetes]))
-    # df_join = eliminar_metadata_sobrante(filtrar_fuera_induccion(df_join))
-    # df_res = agrupar_datos(df_join, agg_funcs=['min', 'max'])
-    # X, y = transformacion_numpy(df_res)
-    # print(df_res.reset_index('id')[('R1', 'min')])
-    # df_res.to_csv('./datos/transformacion.csv')
-    pass
+    # Quitar la porción de las muestras fuera de la inducción
+    df_join = filtrar_fuera_induccion(df_join)
+    # Quitar columnas que no aportan nada
+    df_join = eliminar_metadata_sobrante(df_join)
+    # Agrupar por id con las funciones de agregación indicadas
+    df_res = agrupar_datos(df_join, agg_funcs=funciones_agregacion)
+    df_res.reset_index(inplace=True)
+    df_res.set_index('id', inplace=True)
+    df_res.to_csv(output_dir)
+    return df_res
+
+
+def crear_dataframe_treal(funciones_agregacion=['min', 'max', 'sum', 'mean',
+                                                'median', 'std', 'var', 'sem'],
+                          freq_paquete=30,
+                          unidades_por_freq=2,
+                          output_dir=DATA_TEST_DEFAULT_PATH,
+                          data_dir=DATA_DEFAULT_PATH,
+                          metadata_dir=METADATA_DEFAULT_PATH):
+    # Leer conjuntos de datos
+    df_datos = leer_conjunto_datos(data_dir)
+    df_metadatos = leer_conjunto_datos(metadata_dir)
+    # Unir datos y metadatos
+    df_join = juntar_datos_metadatos(df_datos, df_metadatos)
+    # Empaquetar los datos para simular una situación más realista
+    df_join, clases = empaquetar_muestras(df_join, freq_paquete,
+                                          unidades_por_freq)
+    # Quitar columnas que no aportan nada
+    df_join = eliminar_metadata_sobrante(df_join)
+    # Agrupar por id con las funciones de agregación indicadas
+    df_res = df_join.groupby(['id']).agg(funciones_agregacion).fillna(0)
+    df_res.insert(0, 'clase', clases)
+    df_res.reset_index(inplace=True)
+    df_res.set_index('id', inplace=True)
+    df_res.to_csv(output_dir)
+    return df_res
+
+
+def csv_a_numpy(path):
+    df = pd.read_csv(path, header=[0, 1, 2])
+    arr = df.to_numpy()
+    np.random.shuffle(arr)
+    cols = list(df.columns[2:])
+    for i in range(len(cols)):
+        cols[i] = (str(cols[i][0]) + '_' + str(cols[i][1]))
+    return arr[:, 2:].astype(np.float), arr[:, 1].astype(np.object), cols
+
+
+if __name__ == '__main__':
+    # crear_dataframe_train()
+    crear_dataframe_treal(freq_paquete=60, unidades_por_freq=2)
+    print(csv_a_numpy(DATA_TEST_DEFAULT_PATH))
