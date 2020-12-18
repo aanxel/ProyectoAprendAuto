@@ -288,8 +288,10 @@ print(f'Error del clasificador sobre el conjunto de test: {(1-clf_boosting.score
     Error del clasificador sobre el conjunto de test: 2.213788741302969%
 
 
-Análisis de la celda de arriba
+Como se ve, los resultados son bastante buenos, con cerca de un 2% mejor; además se refuerza la confianza en el clasificador por sus resultados con k-fold en el conjunto de train. Los errores, al igual que con SVM con pesos balanceados y árbol de decisión se deben a confundir estímulos con backround o al revés.
 
 ## Conclusiones
 
-...
+El dataset transformado claramente sigue un patrón que había que encontrar y el modelo que mejor ha funcionado es el que se esperaba teoricamente: boosting, pues había pocas muestras que no fueran background y los efectos de sus atributos sobre la decisión eran sutiles (especialmente 'banana'), por lo que convenía enfocarse en estos casos que daban error ante una clasificación más general y sin tenerle miedo al overfitting (se ha utilizado un learning rate alto). El resto de clasificadores pecaban o de darle demasiada importancia a background (árbol de decisión, SVM con pesos iguales) o le daba demasiado peso a las clases minoritarias (SVM con pesos balanceados).
+
+Al ser la relación entre atributos compleja, es razonable la hipótesis de que una red neuronal podría haber funcionado también bastante bien, pues con suficientes neuronas, puede ajustar cualquier función; y como en este caso el underfitting ha sido más frecuente que el overfitting, cabe esperar que también funcionaria correctamente.
