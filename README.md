@@ -1,5 +1,22 @@
 # Análisis inicial del conjunto de datos
 
+## Como clonar este repositorio
+
+Este repositorio contiene archivos muy grandes, por lo que se ha utilizado un sistema de almacenamiento de archivos grandes de git.
+
+Este sistema se instala como plugin del binario de git de línea de comando. Las instrucciones de instalación se encuentran en el siguiente enlace:
+
+https://git-lfs.github.com/
+
+En ubuntu los comandos serían:
+
+```bash
+curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash
+sudo apt-get update
+sudo apt-get upgrade
+git lfs install
+```
+
 ## Introducción
 
 En `./datos/HT_Sensor*.dat` se tiene el conjunto de datos original, separado en un fichero de atributos y otro de meta-atributos. El dataset describe medidas de un sensor de olores, caracterizado por un conjunto de resistencias y un medidor de temperatura y humedad del ambiente. Cada medida se puede representar de la siguiente forma:
