@@ -1,6 +1,4 @@
-# Análisis inicial del conjunto de datos
-
-## Como clonar este repositorio
+# Como clonar este repositorio
 
 Este repositorio contiene archivos muy grandes, por lo que se ha utilizado un sistema de almacenamiento de archivos grandes de git.
 
@@ -16,6 +14,8 @@ sudo apt-get update
 sudo apt-get upgrade
 git lfs install
 ```
+
+# Análisis del conjunto de datos
 
 ## Introducción
 
